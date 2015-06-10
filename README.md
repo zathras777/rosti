@@ -18,6 +18,8 @@ After spending some hours trying to remove injected code from a Wordpress site f
 
 It scans for the code that I deal with, but should be easy enough to add additional patterns. It automates finding sites, which allows it to be used for a large number of sites without needing to worry about specifying every one. Additionally a file can be specified with paths to emails to allow reports to be sent to site owners, if desired.
 
+It scans for both Wordpress and Joomla sites, though the detection of Joomla could be improved :-)
+
 I'm making this available as it was useful for me and might save someone some time in the future!
 
 ## Usage Examples

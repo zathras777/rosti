@@ -176,6 +176,9 @@ def main():
     for a, b, c in os.walk(args.directory):
         if 'wp-content' in b and 'wp-admin' in b:
             sites.append(a)
+        if 'configuration.php' in c and 'joomla.xml' in c:
+            sites.append(a)
+            
 
     print("Total of {} sites to scan...".format(len(sites)))
 
