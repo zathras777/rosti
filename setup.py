@@ -31,4 +31,5 @@ setup(
         'console_scripts': ['rosti=rosti:main']
     },
     download_url = 'https://github.com/zathras777/rosti/tarball/0.1.0',
+    test_suite='tests'
 )

@@ -10,10 +10,9 @@ import subprocess
 EMAIL_FROM = None
 
 class ScanWordpress(object):
-    ISSET_PATTERN = "<\?[php]* if\(\!isset\(\$GLOBALS\["
+    ISSET_PATTERN = "<\?[php]?.*isset\(\$GLOBALS\["
 
     def __init__(self, where, email=None, keep_original=False):
-        print("Scanning {}".format(where))
         self.where = where
         self.email = email
         self.keep = keep_original
@@ -35,65 +34,68 @@ class ScanWordpress(object):
 
         self.infected = [[f] for f in self.php_files if scan_file(f)]
 
-    def clean_files(self):
+    def clean_files(self, prefix=None):
+        details = []
         for info in self.infected:
-            info.extend(self._find_isset(info[0]))
-            info.extend(self._find_rot13(info[0]))
+            details.extend(self._clean_file(info[0], prefix))
         self.cleaned = True
+        return details
 
-    def _find_isset(self, fn):
+    def _clean_file(self, fn, prefix=None):
         info = []
-        new_fn = ''
-        original = ''
+        new_lines = []
+        original = []
+        n = 0
+
         with open(fn, 'r') as fh:
-            n = 1
-            for ln in fh.readlines():
-                if self.keep:
-                    original += ln
-                ln = ln.strip()
+            lines = original = [l.strip() for l in fh.readlines()]
+            while n < len(lines):
+
+                ln = lines[n]
+                found = False
+
+                # isset
                 ck = re.search(self.ISSET_PATTERN, ln)
                 if ck is not None:
                     info.append("isset: removed from line {}".format(n))
                     tags = ln.split('><')
                     if len(tags) > 1:
-                        new_fn += "<"+tags[-1] + "\n"
-                    continue
-                else:
-                    new_fn += ln + "\n"
+                        new_lines.append("<"+tags[-1])
+                    else:
+                        tags = ln.split("<?php")
+                        if len(tags) > 1:
+                            new_lines.append("<?php {}".format(tags[-1]))
+                    found = True
+
+                # @assert(str_rot13
+                if '@assert(str_rot13' in ln:
+                    info.append('rot13: removed line {}'.format(n))
+                    if '//##' in lines[n + 1]:
+                        n += 1
+                    if lines[n + 1] == '?>' and new_lines[-2] == '<?php':
+                        n += 1
+                        del new_lines[-2]
+                    if '//##' in new_lines[-1]:
+                        new_lines.pop()
+                    found = True
+
+                if not found:
+                    new_lines.append(ln)
+
                 n += 1
 
-        with open(fn, 'w') as fh:
-            fh.write(new_fn)
+        new_fn = fn
+        if prefix is not None:
+            name, ext = os.path.splitext(fn)
+            new_fn = "{}_{}{}".format(name, prefix, ext)
+
+        with open(new_fn, 'w') as fh:
+            fh.write("\n".join(new_lines))
+
         if self.keep:
             with open(fn + '.hacked', 'w') as fh:
-                fh.write(original)
+                fh.write("\n".join(original))
 
-        return info
-
-    def _find_rot13(self, fn):
-        info = []
-        new_fn = ''
-        with open(fn, 'r') as fh:
-            lines = [l.strip() for l in fh.readlines()]
-        remove = []
-        new_lines = []
-        n = 0
-        while n < len(lines):
-            if '@assert(str_rot13' in lines[n]:
-                info.append('rot13: removed line {}'.format(n))
-                if '//##' in lines[n + 1]:
-                    n += 1
-                if lines[n + 1] == '?>' and new_lines[-2] == '<?php':
-                    n += 1
-                    del new_lines[-2]
-                if '//##' in new_lines[-1]:
-                    new_lines.pop()
-            else:
-                new_lines.append(lines[n])
-            n += 1
-
-        with open(fn, 'w') as fh:
-            fh.write("\n".join(new_lines))
         return info
 
     def report(self):
@@ -137,6 +139,10 @@ class ScanWordpress(object):
         for info in sorted(self.infected):
             os.unlink(info[0]+'.hacked')
 
+    def is_infected(self):
+        return len(self.infected) > 0
+
+
 def main():
     parser = argparse.ArgumentParser(description='rosti Wordpress rot13 exploit remover')
 
@@ -178,7 +184,7 @@ def main():
             sites.append(a)
         if 'configuration.php' in c and 'joomla.xml' in c:
             sites.append(a)
-            
+
 
     print("Total of {} sites to scan...".format(len(sites)))
 
