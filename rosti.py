@@ -58,13 +58,13 @@ class ScanWordpress(object):
                 ck = re.search(self.ISSET_PATTERN, ln)
                 if ck is not None:
                     info.append("isset: removed from line {}".format(n))
-                    tags = ln.split('><')
-                    if len(tags) > 1:
-                        new_lines.append("<"+tags[-1])
-                    else:
-                        tags = ln.split("<?php")
-                        if len(tags) > 1:
-                            new_lines.append("<?php {}".format(tags[-1]))
+
+                    for tags, rqd, add in [(ln.split('><'), 1, '<'),
+                                           (ln.split("<?php"), 2, '<?php'),
+                                           (ln.split(' ?>'), 1, '')]:
+                        if len(tags) > rqd:
+                            new_lines.append(add + tags[-1])
+                            break
                     found = True
 
                 # @assert(str_rot13

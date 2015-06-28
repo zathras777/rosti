@@ -11,5 +11,8 @@ class SampleTest(unittest.TestCase):
         self.assertTrue(sw.is_infected())
         info = sw.clean_files('cleaned')
         self.assertTrue(os.path.exists(os.path.join(s_dir, 'sample1_cleaned.php')))
-        self.assertEqual(len(info), 1)
-        os.unlink(os.path.join(s_dir, 'sample1_cleaned.php'))
+        self.assertEqual(len(info), len(sw.infected))
+
+        for fn in sw.infected:
+            name, ext = os.path.splitext(fn[0])
+            os.unlink(name + '_cleaned' + ext)
