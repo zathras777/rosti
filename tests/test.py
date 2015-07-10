@@ -1,18 +1,22 @@
 import os
 import unittest
 
-from rosti import ScanWordpress
+from rosti import PhpFile
 
 
 class SampleTest(unittest.TestCase):
     def test_01(self):
         s_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'samples'))
-        sw = ScanWordpress(s_dir)
-        self.assertTrue(sw.is_infected())
-        info = sw.clean_files('cleaned')
-        self.assertTrue(os.path.exists(os.path.join(s_dir, 'sample1_cleaned.php')))
-        self.assertEqual(len(info), len(sw.infected))
-
-        for fn in sw.infected:
-            name, ext = os.path.splitext(fn[0])
-            os.unlink(name + '_cleaned' + ext)
+        checked = suspect = 0
+        for f in os.listdir(s_dir):
+            if not f.endswith('php'):
+                continue
+            checked += 1
+            p = PhpFile(os.path.join(s_dir, f))
+            if 'short' in f:
+                self.assertFalse(p.possibly_infected())
+            else:
+                self.assertTrue(p.possibly_infected())
+                suspect += 1
+        self.assertEqual(checked, 8)
+        self.assertEqual(suspect, 7)

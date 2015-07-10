@@ -9,227 +9,156 @@ import subprocess
 
 EMAIL_FROM = None
 
-class ScanWordpress(object):
-    ISSET_PATTERN = "<\?[php]?.*isset\(\$GLOBALS\["
+class PhpFile(object):
+    SUSPECT_RE = re.compile("^\<\?(php)?")
+    TAG_RE = "\<\?(php)?(.*?)\?\>"
+    CHECKS = [
+        (re.compile("^<\?(php)? \$[a-z]{6,} \= \"[a-f0-9]{5,}\"; preg_replace\(\".*?\",\".*?\",\".*?\"\); \?>"),
+         "preg_replace code detected"),
+        (re.compile("^<\?(php)? \$([a-z]{5,}) = .*function_exists"),
+         "function...for code detected"),
+        (re.compile(".*\!isset\(\$GLOBALS\[\""),
+         "!isset($GLOBALS[ detected"),
+        (re.compile(".*eval\((gzinflate|base64_decode)\("),
+         "eval code with inflate/base64_decode detected")
+    ]
+    LENGTH_WARN = 475
 
-    def __init__(self, where, email=None, keep_original=False):
-        self.where = where
-        self.email = email
-        self.keep = keep_original
-        self.php_files = []
-        self.cleaned = False
-
-        for a, b, c in os.walk(self.where):
-            for fn in c:
-                if fn.endswith('.php'):
-                    self.php_files.append(os.path.join(a, fn))
-
-        def scan_file(fn):
-            with open(fn, 'r') as fh:
-                for ln in fh.readlines():
-                    if len(ln) > 256:
-                        if re.search(self.ISSET_PATTERN, ln) is not None or 'rot13' in ln:
-                            return True
-            return False
-
-        self.infected = [[f] for f in self.php_files if scan_file(f)]
-
-    def clean_files(self, prefix=None):
-        details = []
-        for info in self.infected:
-            details.extend(self._clean_file(info[0], prefix))
-        self.cleaned = True
-        return details
-
-    def _clean_file(self, fn, prefix=None):
-        info = []
-        new_lines = []
-        original = []
-        n = 0
-
+    def __init__(self, fn):
+        self.filename = fn
+        self.keep_original = False
+        self.suspect_lines = []
         with open(fn, 'r') as fh:
-            lines = original = [l.strip() for l in fh.readlines()]
-            while n < len(lines):
+            ln = 0
+            for line in fh.readlines():
+                if self.SUSPECT_RE.match(line) and \
+                                len(line) > self.LENGTH_WARN:
+                    self.suspect_lines.append((ln, line))
+                ln += 1
 
-                ln = lines[n]
-                found = False
+    def possibly_infected(self):
+        return len(self.suspect_lines) > 0
 
-                # isset
-                ck = re.search(self.ISSET_PATTERN, ln)
+    def check(self):
+        info = []
+        for (ln, suspect) in self.suspect_lines:
+            for m in re.finditer(self.TAG_RE, suspect):
+                ck = self._check_match(m)
                 if ck is not None:
-                    info.append("isset: removed from line {}".format(n))
-
-                    for tags, rqd, add in [(ln.split('><'), 1, '<'),
-                                           (ln.split("<?php"), 2, '<?php'),
-                                           (ln.split(' ?>'), 1, '')]:
-                        if len(tags) > rqd:
-                            new_lines.append(add + tags[-1])
-                            break
-                    found = True
-
-                # @assert(str_rot13
-                if '@assert(str_rot13' in ln:
-                    info.append('rot13: removed line {}'.format(n))
-                    if '//##' in lines[n + 1]:
-                        n += 1
-                    if lines[n + 1] == '?>' and new_lines[-2] == '<?php':
-                        n += 1
-                        del new_lines[-2]
-                    if '//##' in new_lines[-1]:
-                        new_lines.pop()
-                    found = True
-
-                if not found:
-                    new_lines.append(ln)
-
-                n += 1
-
-        new_fn = fn
-        if prefix is not None:
-            name, ext = os.path.splitext(fn)
-            new_fn = "{}_{}{}".format(name, prefix, ext)
-
-        with open(new_fn, 'w') as fh:
-            fh.write("\n".join(new_lines))
-
-        if self.keep:
-            with open(fn + '.hacked', 'w') as fh:
-                fh.write("\n".join(original))
-
+                    info.append("{}: {}".format(ln, ck))
         return info
 
-    def report(self):
-        rv = "Possibly infected file report for '{}'.\n\n".format(self.where)
-        rv += "Total of {} files require attention:\n".format(len(self.infected))
-        for info in sorted(self.infected):
-            rv += "    {}\n".format(info[0])
-            rv += "\n".join(["        - {}".format(xtra) for xtra in info[1:]])
-            if len(info) > 1:
-                rv += '\n'
-        if self.keep and self.cleaned:
-            rv += "\nDiffs..."
-            for info in sorted(self.infected):
-                p = subprocess.Popen(['diff', '-u', info[0]+'.hacked', info[0]],
-                                     stdout=subprocess.PIPE,
-                                     stderr=subprocess.PIPE)
-                out, err = p.communicate()
-                rv += out + "\n\n"
-        return rv
+    def clean(self):
+        new_lines = []
+        old_lines = []
+        cleaned = 0
+        with open(self.filename, 'r') as fh:
+            for line in fh.readlines():
+                line = line.strip()
+                old_lines.append(line)
+                if re.search(self.TAG_RE, line) is None:
+                    new_lines.append(line)
+                else:
+                    kept = ''
+                    last = 0
+                    for m in re.finditer(self.TAG_RE, line):
+                        if m.start() != last:
+                            kept += line[last:m.start()]
+                        ck = self._check_match(m, True)
+                        if ck is None:
+                            kept += m.group(0)
+                        else:
+                            cleaned += 1
+                        last = m.end()
+                    if last != len(line):
+                        kept += line[last:]
+                    new_lines.append(kept)
 
-    def send_report(self):
-        if self.email is None or EMAIL_FROM is None:
-            return False
+        if self.keep_original:
+            fn, ext = os.path.splitext(self.filename)
+            with open(fn+'_original'+ext, 'w') as out:
+                out.write("\n".join(old_lines))
 
-        msg = MIMEText(self.report())
-        msg['Subject'] = 'Infected File Report for '.format(self.where)
-        msg['From'] = EMAIL_FROM
-        msg['To'] = self.email
+        if len("".join(new_lines)) == 0:
+            os.unlink(self.filename)
+            return "DELETED: {} as cleaning resulted in empty file".format(self.filename)
 
-        # Send the message via our own SMTP server, but don't include the
-        # envelope header.
-        s = smtplib.SMTP('localhost')
-        s.sendmail(EMAIL_FROM, [self.email], msg.as_string())
-        s.quit()
+        with open(self.filename, 'w') as fh:
+            fh.write("\n".join(new_lines))
 
-        return True
+        if cleaned == 0:
+            return "SKIPPED: {} due no pattern matches".format(self.filename)
+        return "CLEANED: {} ({} patterns)".format(self.filename, cleaned)
 
-    def cleanup(self):
-        if not self.cleaned or not self.keep:
-            return
-        for info in sorted(self.infected):
-            os.unlink(info[0]+'.hacked')
+    def _check_match(self, match, cleaning=False):
+        for chk in self.CHECKS:
+            if chk[0].match(match.group(0)) is not None:
+                return chk[1]
 
-    def is_infected(self):
-        return len(self.infected) > 0
+        if cleaning:
+            return None
+
+        if match.end() - match.start() > self.LENGTH_WARN:
+            return "Code from {}-{} is long ({} vs {}).".format(
+                match.start(), match.end(), len(match.group(0)),
+                self.LENGTH_WARN)
+        return None
+
+def print_report(php):
+    print("\n{}".format(php.filename))
+    for info in php.check():
+        print("    {}".format(info))
 
 
 def main():
-    parser = argparse.ArgumentParser(description='rosti Wordpress rot13 exploit remover')
+    parser = argparse.ArgumentParser(description='rosti: a PHP infected file scanner')
 
-    parser.add_argument('--report-only', action='store_true',
-                        help='Just report on infected files.')
-    parser.add_argument('--no-report', action='store_true', help='No report, just clean')
-    parser.add_argument('--from', dest='from_email', help='Email address reports will be sent from')
-    parser.add_argument('--email', help='Email address to send report')
-    parser.add_argument('--email-file', help='File with email addresses to use for sites')
-    parser.add_argument('--diffs', action='store_true', help='Keep original files and produce diffs')
-
+    parser.add_argument('--clean', action='store_true', help='Clean infected files.')
+    parser.add_argument('--no-report', action='store_false', help='No report')
+    parser.add_argument('--keep-original', action='store_true', help='Preserve original')
     parser.add_argument('directory', help="Directory to start scan from")
 
     args = parser.parse_args()
 
-    if args.report_only and args.no_report:
-        print("You cannot use '--report-only' and '--no-report' flags at the same time!")
-        sys.exit(0)
-
-    if args.from_email is not None:
-        EMAIL_FROM = args.from_email
-
-    site_emails = {}
-    if args.email_file is not None:
-        with open(args.email_file, 'r') as fh:
-            for ln in fh.readlines():
-                if '#' in ln:
-                   ln, ignored = ln.strip().split('#', 1)
-                if len(ln) == 0:
-                    continue
-                print(len(ln), ln)
-                path, email = re.split('[ |\t|\:]', ln)
-                site_emails[path.strip()] = email.strip()
-
-    sites = []
-    reports = {}
+    suspect = []
+    checked = dircount = 0
     for a, b, c in os.walk(args.directory):
-        if 'wp-content' in b and 'wp-admin' in b:
-            sites.append(a)
-        if 'configuration.php' in c and 'joomla.xml' in c:
-            sites.append(a)
+        dircount += 1
+        for fn in c:
+            if fn.endswith('php'):
+                php = PhpFile(os.path.join(a, fn))
+                checked += 1
+                if php.possibly_infected():
+                    suspect.append(php)
 
+    print("Checked a total of {} files in {} directories, of which {} are suspect.".format(
+        checked, dircount, len(suspect)))
 
-    print("Total of {} sites to scan...".format(len(sites)))
+    ss = []
+    for s in suspect:
+        if s.check() != []:
+            ss.append(s)
 
-    for wp in sites:
-        sc = ScanWordpress(wp, site_emails.get(wp), args.diffs)
-        if len(sc.infected) == 0:
-            print("  skipped {} as no infected files found...".format(sc.where))
-            continue
-
-        if not args.report_only:
-            sc.clean_files()
-
-        if not args.no_report:
-            if not sc.send_report():
-                reports[wp] = sc.report()
-        sc.cleanup()
-
-    print("Completed.")
+    suspect = ss
     if args.no_report:
-        sys.exit(0)
+        for s in suspect:
+            print_report(s)
 
-    if len(reports):
-        if args.email is not None:
-            if EMAIL_FROM is None:
-                print("\nUnable to send mails as no source address specified. Use --from option.")
-            else:
-                msg = MIMEText("\n\n".join([reports[k] for k in reports]))
-                msg['Subject'] = 'Infected File Reports'
-                msg['From'] = EMAIL_FROM
-                msg['To'] = args.email
+    print("\nCleaning:")
+    if args.clean:
+        info = []
+        for s in suspect:
+            if args.keep_original:
+                s.keep_original = True
+            info.append(s.clean())
+        print("\nCleaning was performed:")
+        for i in info:
+            print("  {}".format(i))
+    else:
+        print("Cleaning not requested (use --clean).")
 
-                # Send the message via localhost SMTP server, but don't include the
-                # envelope header.
-                try:
-                    s = smtplib.SMTP('localhost')
-                    s.sendmail(EMAIL_FROM, [args.email], msg.as_string())
-                    s.quit()
-                    reports = []
-                except:
-                    print("Error sending mail, showing output instead.")
-
-    if len(reports):
-        print("\nNot sending reports as no default email address supplied...\n")
-        for k in reports:
-            print(reports[k])
+    print("\nFinished.")
+    sys.exit(0)
 
 
 if __name__ == '__main__':
