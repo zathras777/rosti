@@ -5,20 +5,27 @@ _**rosti** - A swiss dish consisting mainly of potatoes._
 ## Usage
 
 ```
-$ rosti --report-only /some/directory
-Total of 1 sites to scan...
-Scanning /some/directory/subdir/wordpress
-  skipped /some/directory/subdir/wordpress as no infected files found...
-Completed.
+$ rosti /some/directory
+Checked a total of 23985 files in 17677 directories, of which 28 are suspect.
+
+/some/directory/a_file.php
+    0: Code from 0-510 is long (510 vs 475).
+
+Cleaning:
+Cleaning not requested (use --clean).
+
+Finished.
 ```
 
 ## What?
 
-After spending some hours trying to remove injected code from a Wordpress site following a compromise, I decided to write a script to automate the process. This is the result.
+After a large scale infection of a number of sites I found that removing all the code that had been added to PHP files
+was proving to be very time consuming. The scope of the infection was also difficult to assess and while in an ideal
+world I would have simply replaced all the possibly infected code, a number of my clients would have found this impossible
+to accomplish without a lot of assistance. Given all of this, I wrote this small script and started looking at the malicious
+code in order to be able to detect patterns.
 
-It scans for the code that I deal with, but should be easy enough to add additional patterns. It automates finding sites, which allows it to be used for a large number of sites without needing to worry about specifying every one. Additionally a file can be specified with paths to emails to allow reports to be sent to site owners, if desired.
-
-It scans for both Wordpress and Joomla sites, though the detection of Joomla could be improved :-)
+I recognise that this approach is flawed for any long term solution, but at present it works and has saved me many hours!
 
 I'm making this available as it was useful for me and might save someone some time in the future!
 
@@ -26,19 +33,11 @@ I'm making this available as it was useful for me and might save someone some ti
 
 To scan a directory and report on possibly infected files.
 
-> $ rosti --report-only /some/directory
-
-To scan and send a report via email.
-
-> $ rosti --report-only --from source@domain.com --email person@domain.com /some/directory
+> $ rosti /some/directory
 
 To scan, clean and report.
 
-> $ rosti --from source@domain.com --email person@domain.com /some/directory
-
-To view everything that was done, you can get full diffs. However, this option generates a LOT of output and will probably exceed the email message size.
-
-> $ rosti --diffs /some/directory
+> $ rosti /some/directory --clean
 
 ## Future
 
@@ -48,7 +47,6 @@ One good suggestion is to add the ability for a comparison to be made of files a
 
 There are a few things that would be useful to do.
 
-- compress the diffs and attach to an email
 - better reporting of what has been done
 - improve the removal logic
 

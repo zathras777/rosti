@@ -11,7 +11,7 @@ with io.open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='rosti',
-    version='0.3',
+    version='0.4',
     description='Script to clean nasty code from a compromised php site.',
     long_description=long_description,
     url='https://github.com/zathras777/rosti',
@@ -20,16 +20,13 @@ setup(
     license='Unlicense',
     classifiers=[
         'Development Status :: 3 - Alpha',
-        'Intended Audience :: Developers',
-        'Topic :: Software Development :: Libraries :: Python Modules',
-        'Topic :: Multimedia :: Video :: Display',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.4',
     ],
-    keywords='appletv video ffmpeg streaming',
+    keywords='php scanner infected',
     entry_points={
         'console_scripts': ['rosti=rosti:main']
     },
-    download_url = 'https://github.com/zathras777/rosti/tarball/0.1.0',
+    download_url='https://github.com/zathras777/rosti/tarball/0.4',
     test_suite='tests'
 )
