@@ -20,7 +20,9 @@ class PhpFile(object):
         (re.compile(".*\!isset\(\$GLOBALS\[\""),
          "!isset($GLOBALS[ detected"),
         (re.compile(".*eval\((gzinflate|base64_decode)\("),
-         "eval code with inflate/base64_decode detected")
+         "eval code with inflate/base64_decode detected"),
+        (re.compile("^<\?(php)?\s+(\$\w+)=\".*\\2\[\d+\]\.\\2\[.*eval"),
+         "substring replacement code detected")
     ]
     LENGTH_WARN = 475
 

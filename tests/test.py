@@ -18,5 +18,5 @@ class SampleTest(unittest.TestCase):
             else:
                 self.assertTrue(p.possibly_infected())
                 suspect += 1
-        self.assertEqual(checked, 8)
-        self.assertEqual(suspect, 7)
+        self.assertEqual(checked, 9)
+        self.assertEqual(suspect, 8)
