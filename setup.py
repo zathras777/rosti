@@ -11,7 +11,7 @@ with io.open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='rosti',
-    version='0.4',
+    version='0.4.1',
     description='Script to clean nasty code from a compromised php site.',
     long_description=long_description,
     url='https://github.com/zathras777/rosti',
@@ -27,6 +27,6 @@ setup(
     entry_points={
         'console_scripts': ['rosti=rosti:main']
     },
-    download_url='https://github.com/zathras777/rosti/tarball/0.4',
+    download_url='https://github.com/zathras777/rosti/archive/0.4.1.zip',
     test_suite='tests'
 )

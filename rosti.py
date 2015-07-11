@@ -13,9 +13,9 @@ class PhpFile(object):
     SUSPECT_RE = re.compile("^\<\?(php)?")
     TAG_RE = "\<\?(php)?(.*?)\?\>"
     CHECKS = [
-        (re.compile("^<\?(php)? \$[a-z]{6,} \= \"[a-f0-9]{5,}\"; preg_replace\(\".*?\",\".*?\",\".*?\"\); \?>"),
+        (re.compile("^<\?(php)?\s+\$[a-z]{6,} \= \"[a-f0-9]{5,}\"; preg_replace\(\".*?\",\".*?\",\".*?\"\); \?>"),
          "preg_replace code detected"),
-        (re.compile("^<\?(php)? \$([a-z]{5,}) = .*function_exists"),
+        (re.compile("^<\?(php)?\s+\$([a-z]{5,})\s*= .*function_exists.*\\2="),
          "function...for code detected"),
         (re.compile(".*\!isset\(\$GLOBALS\[\""),
          "!isset($GLOBALS[ detected"),
